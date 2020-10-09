@@ -14,6 +14,6 @@ Main features are :
 * usage can be restricted by modifying specific capabilities (local/mass_enroll:enrol and local:/mass_enroll:unenrol) 
 * can be inserted in Course's admin menu or called from a specific Moodle block 
 
-This plugin is test until Moodle 3.4 after contributing codes to match compatibilies.
+This plugin is test until Moodle 3.6 after contributing codes to match compatibilies.
 
 See the wiki page https://github.com/patrickpollet/moodle_local_mass_enroll/wiki for installation and usage. 

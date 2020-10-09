@@ -256,7 +256,7 @@ function mass_enroll($cir, $course, $context, $data) {
  * @param Object $data    data from a moodleform 
  * @return string  log of operations 
  */
-function mass_unenroll($cir, $course, $context, $data) {
+function mass_unenroll_old($cir, $course, $context, $data) {
     global $CFG,$DB;
      $result = '';
     
@@ -317,7 +317,101 @@ function mass_unenroll($cir, $course, $context, $data) {
     return $result;
 }
 
+function mass_unenroll($cir, $course, $context, $data) {
+    global $CFG,$DB;
+     $result = '';
+    
+    $courseid=$course->id;
+    $useridfield = $data->firstcolumn;
 
+    $unenrollablecount = 0;
+ 
+
+    $enrolmethods = $DB->get_records_sql("SELECT id,enrol FROM {enrol} WHERE courseid=".$course->id );
+
+    $enrolids_arr = array();
+    $enrolnames_arr = array();
+    $plugin = array();
+    foreach($enrolmethods as $enrolm){
+        $eid = $enrolm->id;
+        $method = $enrolm->enrol;
+
+        $enrolids_arr[] = $eid;
+        $enrolnames_arr[$eid] = $method;
+
+        $plugin[$eid] = enrol_get_plugin($method);
+        
+    }
+
+    $enrolids_str = "0";
+    if(count($enrolids_arr) > 0){
+        $enrolids_str = implode(",",$enrolids_arr);
+    }
+        // init csv import helper
+        $cir->init();
+        while ($fields = $cir->next()) {
+            $a = new StdClass();
+
+            if (empty ($fields))
+                continue;
+
+            if (empty($fields[0]))
+                continue;
+        
+            // 1rst column = id Moodle (idnumber,username or email)    
+            // get rid on eventual double quotes unfortunately not done by Moodle CSV importer 
+                $fields[0]= str_replace('"', '', trim($fields[0]));
+            
+            if (!$user = $DB->get_record('user', array($useridfield => $fields[0]))) {
+                $result .= get_string('im:user_unknown', 'local_mass_enroll', $fields[0] ). "\n";
+                continue;
+            }
+
+            // Get user enrolnment method
+            $enrolmethods = $DB->get_records_sql("SELECT enrolid FROM {user_enrolments} WHERE userid=".$user->id." and enrolid in(".$enrolids_str.") " );
+            $checkenrol = 0;
+            $uenrolid = 0;
+            foreach($enrolmethods as $emethod){
+                $checkenrol = 1;
+                $uenrolid = $emethod->enrolid;
+            }
+
+            if($uenrolid == 0){
+                $checkenrol = 0;
+            }
+            //already enroled ?
+            if ($checkenrol == 0) {
+                // weird, user not enrolled      
+                $result .= get_string('im:not_in', 'local_mass_enroll', fullname($user)). "\n";
+
+            } else {
+
+                $plugin = enrol_get_plugin($enrolnames_arr[$uenrolid]);
+                //Moodle 2.x enrolment and role assignment are different
+                // make sure couse DO have a manual enrolment plugin instance in that course
+                //that we are going to use (only one instance is allowed @see enrol/manual/lib.php get_new_instance)
+                // thus call to get_record is safe 
+                $instance = $DB->get_record('enrol', array('courseid' => $course->id, 'enrol' => $enrolnames_arr[$uenrolid]));
+                if (empty($instance)) {
+                    // Only add an enrol instance to the course if non-existent
+                    $enrolid = $plugin->add_instance($course);
+                    $instance = $DB->get_record('enrol', array('id' => $enrolid));
+                }
+
+                // Enrol the user with this plugin instance (unfortunately return void, no more status )
+                $plugin->unenrol_user($instance, $user->id);
+                $result .= get_string('im:unenrolled_ok', 'local_mass_enroll', fullname($user)). "\n";
+                $unenrollablecount++;
+            }
+        }
+    
+    
+
+    //recap final
+    $result .= get_string('im:stats_ui', 'local_mass_enroll', $unenrollablecount) . "\n";
+
+    return $result;
+}
 
 /**
  * Enter description here ...
